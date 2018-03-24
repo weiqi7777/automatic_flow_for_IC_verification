@@ -1,0 +1,28 @@
+session demo_session {
+	top_dir : $ENV(SESSION_DIR);
+	drm : serial local;
+	output_mode : log_only;
+}
+
+group demo_group {
+	scan_script : "vm_scan.pl ius.flt uvm.flt";
+	
+	// pre_group_script:<text></text>
+	
+	// run 
+	run_script :
+	<text> irun -64bit   hello_vmanager.sv -sv -coverage B -covoverwrite
+	</text>;
+	
+	test demo_test {
+		// merge all coverage
+		post_run_script :
+		<text>
+			echo imc -execcmd "merge $ENV(COVERAGE_LOC) -out $DIR(run)/cov_work1 -overwrite -message 1";
+			imc -execcmd "merge $ENV(COVERAGE_LOC) -out $DIR(run)/cov_work1 -overwrite -message 1";
+			cp $DIR(run)/cov_work1/icc*.ucm $DIR(session)/model_dir/icc_*_*.ucm -f;
+			cp $DIR(run)/cov_work1/icc*.ucd $DIR(run)/cov_work/scope/test/icc_*_*.ucd -f
+			rm $DIR(chain)/jobs.db -rf
+			exit 0;
+		</text>
+}
