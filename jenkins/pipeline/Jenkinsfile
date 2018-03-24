@@ -1,0 +1,85 @@
+#!/usr/bin/env groovy 
+pipeline {
+	agent any 
+	triggers {
+		cron("0 0 * * 1-6")
+	}
+	
+	options {
+		timestamps()
+	}
+	
+	parameters {
+		string(name: "prj_name", defaultValue: "decode", description: "project name")
+		booleanParam(name : "sanity build", deafultValue: true, description: "whether build sanity job")
+		booleanParam(name : "regression_build", defaultValue: true, description: "whether build regression job")	
+		string(name: "wait_time", deafultValue: "20", description: "wait time of regression run, time unit: minute")
+	}
+	
+	stages {
+		stage("pull") {
+			steps {
+				echo "pre run ${params.prj_name}, pull code"
+				build(job: "decode_clone", wait": true)
+			}
+		}
+		stage("run") {
+			// failFase : true, force parallel stages's to all be abortes when one of them failed 
+			failFase false
+			
+			parallel {
+				stage("sanity") {
+					when {
+						beforeAgent true
+						expression {
+							return params.sanity build
+						}
+						steps {
+							echo "run sanity job"
+							build(job: "${params.prj_name}_sanity_0", propagate: false, wait: false)
+							build(job: "${params.prj_name}_sanity_1", propagate: false)
+						}
+					}
+				}
+				stage("regression") {
+					when {
+						beforeAgent true
+						expression {
+							return params.regression_build
+						}
+					}
+					steps {
+						sh "sleep ${params.wait_time}m"
+						echo "run regression"
+						script {
+							def regression_job = ["regression_0", "regression_1", "regression_2"]
+							for(int i=0; i<regression_job.size()-1; i++) {
+								build(job: regression_job[i], propagate: false, wait: false)
+							}
+							build(job: regression_job[-1], propagate: false)
+						}
+					}
+				}
+			}
+		}
+		stage("wait") {
+			steps {
+				sh """#!bin/tcsh
+						~/wait_finish.tcsh ${params.prj_name}
+						echo "run finish"
+						exit 0
+					"""
+			}
+		}
+		stage("post") {
+			steps {
+				echo "post"
+			}
+		}
+	}
+	post {
+		always {
+			echo "run finish"
+		}
+	}
+}
